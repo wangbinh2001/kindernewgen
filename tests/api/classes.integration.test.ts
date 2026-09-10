@@ -1,0 +1,171 @@
+import { expect, test } from "bun:test";
+import { and, eq, inArray } from "drizzle-orm";
+import { registerParent } from "../../src/auth/register";
+import { app } from "../../src/server";
+import { db } from "../../src/db";
+import {
+  classes,
+  schoolMemberships,
+  schoolYears,
+  schools,
+  users,
+} from "../../src/db/schema";
+import { withTenant } from "../../src/db/tenant";
+
+type Scenario = {
+  schoolA: string;
+  schoolB: string;
+  phoneA: string;
+  phoneB: string;
+};
+function scenario(): Scenario {
+  const id = crypto.randomUUID();
+  const digits = id.replace(/\D/g, "").slice(0, 6).padEnd(6, "0");
+  return {
+    schoolA: `test-classes-a-${id}`,
+    schoolB: `test-classes-b-${id}`,
+    phoneA: `0931${digits}`,
+    phoneB: `0942${digits}`,
+  };
+}
+async function login(phone: string) {
+  const response = await app.request("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ phone, password: "123456" }),
+  });
+  expect(response.status).toBe(200);
+  return ((await response.json()) as { data: { token: string } }).data.token;
+}
+async function setup(s: Scenario) {
+  await db.insert(schools).values([
+    { id: s.schoolA, name: `Classes A ${s.schoolA}` },
+    { id: s.schoolB, name: `Classes B ${s.schoolB}` },
+  ]);
+  for (const [phone, schoolId] of [
+    [s.phoneA, s.schoolA],
+    [s.phoneB, s.schoolB],
+  ] as const) {
+    await registerParent({ phone, schoolId, displayName: "School Admin" });
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.globalPhone, phone));
+    await db
+      .update(schoolMemberships)
+      .set({ role: "school_admin" })
+      .where(
+        and(
+          eq(schoolMemberships.userId, user!.id),
+          eq(schoolMemberships.schoolId, schoolId),
+        ),
+      );
+  }
+  return { tokenA: await login(s.phoneA), tokenB: await login(s.phoneB) };
+}
+async function cleanup(s: Scenario) {
+  for (const schoolId of [s.schoolA, s.schoolB])
+    await withTenant(schoolId, async (tx) => {
+      await tx.delete(classes).where(eq(classes.schoolId, schoolId));
+      await tx.delete(schoolYears).where(eq(schoolYears.schoolId, schoolId));
+    });
+  const found = await db
+    .select()
+    .from(users)
+    .where(inArray(users.globalPhone, [s.phoneA, s.phoneB]));
+  for (const user of found) {
+    await db
+      .delete(schoolMemberships)
+      .where(eq(schoolMemberships.userId, user.id));
+    await db.delete(users).where(eq(users.id, user.id));
+  }
+  await db.delete(schools).where(inArray(schools.id, [s.schoolA, s.schoolB]));
+}
+async function createYear(token: string, name: string) {
+  const response = await app.request("/api/v1/school/school-years", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name,
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    }),
+  });
+  expect(response.status).toBe(201);
+  return ((await response.json()) as { data: { id: string } }).data.id;
+}
+
+test("school admin can create and list classes", async () => {
+  const s = scenario();
+  try {
+    const { tokenA } = await setup(s);
+    const schoolYearId = await createYear(tokenA, "2026-2027");
+    const created = await app.request("/api/v1/school/classes", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${tokenA}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ name: "Sunflower", schoolYearId }),
+    });
+    expect(created.status).toBe(201);
+    const listed = await app.request("/api/v1/school/classes", {
+      headers: { authorization: `Bearer ${tokenA}` },
+    });
+    expect(listed.status).toBe(200);
+    const body = (await listed.json()) as { data: unknown };
+    expect(body.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Sunflower" })]),
+    );
+  } finally {
+    await cleanup(s);
+  }
+});
+
+test("class rejects duplicate name in the same school year", async () => {
+  const s = scenario();
+  try {
+    const { tokenA } = await setup(s);
+    const schoolYearId = await createYear(tokenA, "2026-2027");
+    for (let i = 0; i < 2; i++) {
+      const response = await app.request("/api/v1/school/classes", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${tokenA}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name: "Sunflower", schoolYearId }),
+      });
+      if (i === 0) expect(response.status).toBe(201);
+      else expect(response.status).toBe(400);
+    }
+  } finally {
+    await cleanup(s);
+  }
+});
+
+test("class data is isolated across tenants", async () => {
+  const s = scenario();
+  try {
+    const { tokenA, tokenB } = await setup(s);
+    const schoolYearId = await createYear(tokenA, "2026-2027");
+    const created = await app.request("/api/v1/school/classes", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${tokenA}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ name: "Sunflower", schoolYearId }),
+    });
+    const id = ((await created.json()) as { data: { id: string } }).data.id;
+    const response = await app.request(`/api/v1/school/classes/${id}`, {
+      headers: { authorization: `Bearer ${tokenB}` },
+    });
+    expect(response.status).toBe(404);
+  } finally {
+    await cleanup(s);
+  }
+});

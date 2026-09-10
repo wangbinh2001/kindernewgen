@@ -1,0 +1,1 @@
+ALTER TABLE "parent_children" ADD CONSTRAINT "parent_children_parent_child_unique" UNIQUE("parent_id","child_id");

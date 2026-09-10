@@ -1,0 +1,368 @@
+{
+  "info": {
+    "name": "Kinder NewGenz Task 10 E2E",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "sysToken", "value": "" },
+    { "key": "schoolId", "value": "" },
+    { "key": "tenantToken", "value": "" },
+    { "key": "schoolYearId", "value": "" },
+    { "key": "classAId", "value": "" },
+    { "key": "classBId", "value": "" },
+    { "key": "studentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/health" },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('health is 200', () => pm.response.to.have.status(200));",
+              "pm.test('success envelope', () => pm.expect(pm.response.json().success).to.eql(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Admin Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"password\": \"{{adminPass}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/auth/admin/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('admin login is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.expect(body.data.token).to.be.a('string');",
+              "const claims = JSON.parse(atob(body.data.token.split('.')[1]));",
+              "pm.test('system claim has no tenant context', () => { pm.expect(claims.role).to.eql('system_admin'); pm.expect(claims.school_id).to.be.undefined; pm.expect(claims.membership_id).to.be.undefined; });",
+              "pm.collectionVariables.set('sysToken', body.data.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Create School",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{sysToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman School {{runId}}\",\n  \"phone\": \"0281234567\",\n  \"email\": \"postman@example.com\",\n  \"address\": \"District 1\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/system/schools"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('school create is 201', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.expect(body.data.createdBy).to.be.a('string');",
+              "pm.collectionVariables.set('schoolId', body.data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System List Schools",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{sysToken}}" }],
+        "url": "{{baseUrl}}/api/v1/system/schools"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('school list is 200', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().data).to.be.an('array');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Update School",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{sysToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"address\": \"District 3\"\n}" },
+        "url": "{{baseUrl}}/api/v1/system/schools/{{schoolId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('school update is 200', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().data.address).to.eql('District 3');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Token Blocked From Tenant API",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{sysToken}}" }],
+        "url": "{{baseUrl}}/api/v1/school/students"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('system token is forbidden on tenant API', () => pm.response.to.have.status(403));",
+              "pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{tenantPhone}}\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('tenant login is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('tenantToken', body.data.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant Token Blocked From System API",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/v1/system/schools"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('tenant token is forbidden on system API', () => pm.response.to.have.status(403));",
+              "pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create School Year",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman 2026-2027 {{runId}}\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2027-06-30\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/school/school-years"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('school year create is 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('schoolYearId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Class A",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman Class A {{runId}}\",\n  \"schoolYearId\": \"{{schoolYearId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/school/classes"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('class A create is 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('classAId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Class B",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman Class B {{runId}}\",\n  \"schoolYearId\": \"{{schoolYearId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/school/classes"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('class B create is 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('classBId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Student In Class A",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"full_name\": \"Postman Student {{runId}}\",\n  \"dob\": \"2020-01-02\",\n  \"gender\": \"female\",\n  \"cccd\": \"{{cccd}}\",\n  \"responsiblePersons\": [{\"type\": \"mother\", \"fullName\": \"Postman Parent\", \"yearOfBirth\": 1990, \"cccd\": \"079000001234\", \"phone\": \"{{parentPhone}}\"}],\n  \"classId\": \"{{classAId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/school/students"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('student create is 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('studentId', pm.response.json().data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfer Student To Class B",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"newClassId\": \"{{classBId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/school/students/{{studentId}}/transfer-class"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('student transfer is 200', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().data.currentClassId).to.eql(pm.collectionVariables.get('classBId'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete Enrolled Class Is Blocked",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{tenantToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/v1/school/classes/{{classBId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('delete enrolled class is blocked', () => pm.response.to.have.status(400));",
+              "pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Suspend School",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{sysToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"status\": \"suspended\"\n}" },
+        "url": "{{baseUrl}}/api/v1/system/schools/{{schoolId}}/status"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('school suspend is 200', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().data.status).to.eql('suspended');"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
