@@ -8,7 +8,6 @@ export type TenantTransaction = PgTransaction<PostgresJsQueryResultHKT, typeof s
 
 export async function withTenant<T>(schoolId: string, callback: (tx: TenantTransaction) => Promise<T>): Promise<T> {
   return await db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL ROLE newgen_app`);
     await tx.execute(sql`SELECT set_config('app.school_id', ${schoolId}, true)`);
     return await callback(tx);
   });

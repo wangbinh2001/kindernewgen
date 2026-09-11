@@ -1,6 +1,6 @@
 {
   "name": "kindernewgenz",
-  "module": "index.ts",
+  "module": "src/server.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -21,5 +21,11 @@
     "jose": "^6.2.12",
     "postgres": "^3.4.9",
     "zod": "^4.6.1"
+  },
+  "scripts": {
+    "db:migrate": "drizzle-kit migrate",
+    "test": "bun test",
+    "dev": "bun run --hot src/server.ts",
+    "db:generate": "drizzle-kit generate"
   }
 }
