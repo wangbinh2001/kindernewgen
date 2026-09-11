@@ -7,13 +7,25 @@ test("tenant context isolates school rows", async () => {
   const schoolA = crypto.randomUUID();
   const schoolB = crypto.randomUUID();
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`INSERT INTO schools (id, name) VALUES (${schoolA}, ${`School A ${schoolA}`}), (${schoolB}, ${`School B ${schoolB}`})`);
+  await withTenant(schoolA, async (tx) => {
+    await tx.execute(sql`INSERT INTO schools (id, name) VALUES (${schoolA}, ${`School A ${schoolA}`})`);
   });
 
-  const result = await withTenant(schoolA, async (tx) => {
-    return await tx.execute(sql`SELECT id FROM schools`);
+  await withTenant(schoolB, async (tx) => {
+    await tx.execute(sql`INSERT INTO schools (id, name) VALUES (${schoolB}, ${`School B ${schoolB}`})`);
   });
 
-  expect(result.count).toBe(1);
+  const countA = await withTenant(schoolA, async (tx) => {
+    const result = await tx.execute(sql`SELECT id FROM schools WHERE id IN (${schoolA}, ${schoolB})`);
+    return result.count;
+  });
+
+  expect(countA).toBe(1);
+
+  const countB = await withTenant(schoolB, async (tx) => {
+    const result = await tx.execute(sql`SELECT id FROM schools WHERE id IN (${schoolA}, ${schoolB})`);
+    return result.count;
+  });
+
+  expect(countB).toBe(1);
 });
