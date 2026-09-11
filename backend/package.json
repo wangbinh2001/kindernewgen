@@ -1,0 +1,39 @@
+{
+  "name": "kindernewgenz",
+  "module": "src/server.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.20.2",
+    "bun-types": "^1.4.2",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^10.10.0",
+    "prettier": "^3.9.6"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@types/papaparse": "^5.5.2",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.7",
+    "jose": "^6.2.12",
+    "papaparse": "^5.7.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.1"
+  },
+  "scripts": {
+    "db:migrate": "drizzle-kit migrate",
+    "test": "bun test tests/api tests/db",
+    "dev": "bun run --hot src/server.ts",
+    "db:generate": "drizzle-kit generate",
+    "seed:sysadmin": "bun run scripts/seed-sysadmin.ts"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
+  }
+}

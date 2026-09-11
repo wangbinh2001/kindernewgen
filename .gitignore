@@ -34,5 +34,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 external_tools/
 output/
 
+# frontend test artifacts
+frontend/playwright-report/
+frontend/test-results/
+__pycache__/
+*.py[cod]
+
 # Finder (MacOS) folder config
 .DS_Store
